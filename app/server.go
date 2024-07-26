@@ -2,10 +2,9 @@ package main
 
 import (
 	"fmt"
+	"goredis/app/core"
 	"net"
 	"os"
-
-	"github.com/codecrafters-io/redis-starter-go/app/core"
 )
 
 func main() {

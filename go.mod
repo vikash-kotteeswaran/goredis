@@ -6,6 +6,6 @@
 //
 // DON'T EDIT THIS!
 
-module github.com/codecrafters-io/redis-starter-go
+module goredis
 
 go 1.22

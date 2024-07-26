@@ -15,53 +15,58 @@ type command struct {
 	name string
 }
 
-func Serve(conn net.Conn) {
-	request := readCommand(conn)
-	commandParts := strings.Split(request, " ")
-	command := commandParts[0]
-	// parameters := commandParts[1:];
-	// nParameters := len(parameters);
+func Serve(conn net.Conn) error {
+	payload, err := readPayload(conn)
+	requests := strings.Split(payload, "\n")
 
-	switch command {
-	case PING:
-		pingAction(conn)
-		break
-	default:
-		pingAction(conn)
-		break
-	}
+	for _, request := range requests {
+		commandParts := strings.Split(request, " ")
+		command := commandParts[0]
+		// parameters := commandParts[1:];
+		// nParameters := len(parameters);
 
-	conn.Close()
-}
-
-func readCommand(conn net.Conn) string {
-	var commandBytes []byte
-	bufferLength := 512
-	readBuf := make([]byte, bufferLength)
-	doBreak := false
-
-	for {
-		nRead, err := conn.Read(readBuf)
-
-		if nRead < bufferLength {
-			err = io.EOF
-		}
-
-		if err != nil {
-			if err != io.EOF {
-				fmt.Println("Failed to read command")
-			}
-			doBreak = true
-		}
-
-		commandBytes = append(commandBytes, readBuf...)
-
-		if doBreak {
+		switch command {
+		case PING:
+			pingAction(conn)
+			break
+		default:
 			break
 		}
 	}
 
-	return string(commandBytes)
+	if err == io.EOF {
+		conn.Close()
+	}
+
+	return err
+}
+
+func readPayload(conn net.Conn) (string, error) {
+	var readErr error
+	var commandBytes []byte
+	bufferLength := 512
+	readBuf := make([]byte, bufferLength)
+	endRead := false
+
+	for {
+		nRead, err := conn.Read(readBuf)
+
+		if err != nil {
+			if err != io.EOF {
+				fmt.Println("Failed to read command :: ", err)
+			}
+			endRead = true
+			readErr = err
+		}
+
+		commandBytes = append(commandBytes, readBuf[:nRead]...)
+
+		if endRead {
+			break
+		}
+	}
+
+	return string(commandBytes), readErr
 }
 
 // Actions for Command
