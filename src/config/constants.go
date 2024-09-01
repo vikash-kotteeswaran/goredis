@@ -1,4 +1,4 @@
-package constants
+package config
 
 const (
 	HOST              = "0.0.0.0"

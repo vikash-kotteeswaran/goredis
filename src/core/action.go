@@ -1,23 +1,38 @@
 package core
 
 import (
-	"fmt"
+	"goredis/src/core/commands"
+	"goredis/src/core/store"
 	"net"
-	"os"
 )
 
-func ListenAndServe(listenerPt *net.Listener, concurrSemaPt *(chan int)) {
-	connection, err := (*listenerPt).Accept()
-	defer connection.Close()
+type Action struct {
+	command    commands.Command
+	params     []string
+	connection *net.Conn
+	store      *store.Store
+}
 
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
-	}
+type Actions []Action
 
-	fmt.Println("New connection :: ", connection.LocalAddr().String())
+func (action *Action) GetCommand() commands.Command {
+	return action.command
+}
 
-	Serve(connection)
+func (action *Action) GetParams() ([]string, int) {
+	return action.params, len(action.params)
+}
 
-	<-(*concurrSemaPt)
+func (action *Action) GetStore() store.Store {
+	return *action.store
+}
+
+func (action *Action) GetActionConnection() net.Conn {
+	return *action.connection
+}
+
+func (action *Action) Execute() {
+	command := action.GetCommand()
+	commandExec := command.GetExecutor()
+	commandExec(*action)
 }

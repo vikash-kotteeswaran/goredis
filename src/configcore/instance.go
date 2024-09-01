@@ -3,7 +3,8 @@ package configcore
 import (
 	"flag"
 	"fmt"
-	"goredis/app/constants"
+	"goredis/src/config"
+	"net"
 	"strconv"
 	"strings"
 )
@@ -21,7 +22,7 @@ const (
 )
 
 var replication Replication = Replication{Role: MASTER_ROLE}
-var addr Address = Address{Host: constants.HOST, Port: constants.PORT}
+var addr Address = Address{Host: config.HOST, Port: config.PORT}
 var CurrInstance Instance = Instance{Name: "default", Addr: addr, Repl: replication}
 
 type Address struct {
@@ -30,9 +31,11 @@ type Address struct {
 }
 
 type Instance struct {
-	Name string
-	Addr Address
-	Repl Replication
+	Name       string
+	Addr       Address
+	ReplId     string
+	ReplOffset int
+	Repl       Replication
 }
 
 type Replication struct {
@@ -51,6 +54,8 @@ func (instance *Instance) String() string {
 	var instanceInfo string
 	instanceInfo = ("name:" + instance.Name + "\n" +
 		instance.Addr.String() + "\n" +
+		"master_repl_id:" + instance.ReplId + "\n" +
+		"master_repl_offset:" + strconv.Itoa(instance.ReplOffset) + "\n" +
 		instance.Repl.String())
 	return instanceInfo
 }
@@ -82,8 +87,8 @@ func SetupInstance() (string, int, error) {
 	var replicaofAddr string
 
 	flag.StringVar(&name, "name", "default", "name of the instance")
-	flag.StringVar(&host, "host", constants.HOST, "host address for the instance")
-	flag.IntVar(&port, "port", constants.PORT, "port address for the instance")
+	flag.StringVar(&host, "host", config.HOST, "host address for the instance")
+	flag.IntVar(&port, "port", config.PORT, "port address for the instance")
 	flag.StringVar(&replicaofAddr, "replicaof", "", "replica of address for the instance")
 	flag.Parse()
 
@@ -106,6 +111,8 @@ func SetupInstance() (string, int, error) {
 			return "", -1, err
 		}
 	} else {
+		CurrInstance.ReplId = "23jk4b4k36bk45jb6k3b4ib123k5bjk23btibd"
+		CurrInstance.ReplOffset = 0
 		CurrInstance.Repl.Role = MASTER_ROLE
 	}
 
@@ -113,6 +120,29 @@ func SetupInstance() (string, int, error) {
 }
 
 func setupReplica(replicaOfAddr Address) error {
+	var respBytes, reqBytes []byte
+	var respStr string
+
+	// Create master Conn
+	masterConn, connErr := net.Dial("tcp", replicaOfAddr.String())
+	if connErr != nil {
+		return connErr
+	}
+
+	// PING master
+	reqBytes = []byte("PING\r\n")
+	respBytes = make([]byte, 500)
+	masterConn.Write(reqBytes)
+	nRead, respErr := masterConn.Read(respBytes)
+
+	if respErr != nil {
+		return respErr
+	}
+
+	respStr = string(respBytes[:nRead])
+	if respStr != "+PONG\r\n" {
+		return fmt.Errorf("ReplicaOf ADdress PING failed :: PING reponse :: ", respStr)
+	}
 
 	return nil
 }

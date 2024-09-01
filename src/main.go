@@ -2,17 +2,16 @@ package main
 
 import (
 	"fmt"
-	"goredis/app/configcore"
-	"goredis/app/constants"
-	"goredis/app/core"
-	"net"
+	"goredis/src/config"
+	"goredis/src/configcore"
+	"goredis/src/core"
 	"os"
 	"strconv"
 	"syscall"
 )
 
 func main() {
-	var connections map[int]int = map[int]int{}
+	var connections map[int]core.Connection = map[int]core.Connection{}
 	host, port, instSetupErr := configcore.SetupInstance()
 
 	if instSetupErr != nil {
@@ -28,7 +27,7 @@ func main() {
 
 	fmt.Println("Server File Descriptor :: " + strconv.Itoa(serverFd) + ":: Created and Binded to Host and Port :: " + host + ":" + strconv.Itoa(port))
 
-	listenErr := syscall.Listen(serverFd, constants.CONCURRENCY_LIMIT)
+	listenErr := syscall.Listen(serverFd, config.CONCURRENCY_LIMIT)
 	if listenErr != nil {
 		fmt.Errorf("Error: " + "Failed to start listening from file descriptor")
 		os.Exit(1)
@@ -36,7 +35,7 @@ func main() {
 
 	fmt.Println("Server File Descriptor is Listening on :: " + host + ":" + strconv.Itoa(port))
 
-	multiplexer, multiplexerErr := core.GetMultiplexer(constants.CONCURRENCY_LIMIT)
+	multiplexer, multiplexerErr := core.GetMultiplexer(config.CONCURRENCY_LIMIT)
 	if multiplexerErr != nil {
 		fmt.Println("Error: " + "Failed to create multiplexer for serving connections")
 		os.Exit(1)
@@ -50,7 +49,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	for !constants.DOABORT {
+	for !config.DOABORT {
 		availableEvents, pollErr := multiplexer.Poll()
 		if pollErr != nil {
 			fmt.Println("Error: " + "Failed to fetch available file descriptors :: " + pollErr.Error())
@@ -69,19 +68,11 @@ func main() {
 				syscall.SetNonblock(connectedFd, true)
 				multiplexer.Subscribe(connectedFd)
 
-				connections[connectedFd] = connectedFd
+				connections[connectedFd] = core.Connection{Fd: connectedFd}
 			} else {
-				connectedFd := connections[availableFd]
-				osFile := os.NewFile(uintptr(connectedFd), "clientConnectionFile")
-				conn, connErr := net.FileConn(osFile)
-				if connErr != nil {
-					fmt.Println("Error: " + strconv.Itoa(connectedFd) + " :: " + connErr.Error())
-					break
-				}
-				core.Serve(conn)
-				multiplexer.UnSubscribe(connectedFd)
-				osFile.Close()
-				conn.Close()
+				connection := connections[availableFd]
+				core.Serve(connection)
+				multiplexer.UnSubscribe(availableFd)
 			}
 		}
 	}
