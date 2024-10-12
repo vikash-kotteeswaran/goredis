@@ -1,9 +1,8 @@
-package commands
+package core
 
 import (
 	"fmt"
 	"goredis/src/config"
-	"goredis/src/configcore"
 	"strconv"
 	"strings"
 )
@@ -21,15 +20,13 @@ func setKeyExec(action Action) {
 	val := params[1]
 	var ttl int64 = -1
 
-	if strings.ToLower(params[2]) == "px" {
-		if nParam <= 3 {
-			fmt.Println("Cannot perform command :: Params not correct :: ", params, nParam)
-			return
-		}
-		var parseErr error = nil
-		ttl, parseErr = strconv.ParseInt(params[3], 10, 64)
-		if parseErr != nil {
-			fmt.Println("Performing Set Action :: Incorrect ttl given :: ", params[3])
+	for idx, param := range params {
+		paramStr, isStr := param.(string)
+		if isStr && strings.ToLower(paramStr) == "px" {
+			if idx+1 >= nParam {
+				fmt.Println("Cannot perform command :: Params not correct :: ", params, nParam)
+			}
+			ttl = params[idx+1].(int64)
 		}
 	}
 	inserted, err := store.Set(key, val, ttl)
@@ -44,7 +41,7 @@ func setKeyExec(action Action) {
 		return
 	}
 
-	response := []byte("+OK\r\n")
+	response := []byte(UnParseValue("OK", true))
 	conn.Write(response)
 }
 
@@ -58,14 +55,14 @@ func getKeyExec(action Action) {
 		return
 	}
 
-	key := params[0]
+	key := params[0].(string)
 	value, getErr := store.Get(key)
 	if getErr != nil {
 		fmt.Println("Error while getting key value :: Key :: ", key)
 		return
 	}
 
-	response := []byte(value.(string) + "\r\n")
+	response := []byte(UnParseValue(value, false))
 	_, writeErr := conn.Write(response)
 	if writeErr != nil {
 		fmt.Println("Failed to perform command")
@@ -80,8 +77,8 @@ func echoExec(action Action) {
 		return
 	}
 
-	echoStr := params[0]
-	response := []byte(echoStr + "\r\n")
+	echoStr := params[0].(string)
+	response := []byte(UnParseValue(echoStr, false))
 	_, err := conn.Write(response)
 	if err != nil {
 		fmt.Println("Failed to perform command")
@@ -90,7 +87,26 @@ func echoExec(action Action) {
 
 func pingExec(action Action) {
 	conn := action.GetActionConnection()
-	response := []byte("+PONG\r\n")
+	response := []byte(UnParseValue("PONG", true))
+	_, err := conn.Write(response)
+	if err != nil {
+		fmt.Println("Failed to perform command")
+	}
+}
+
+func replConfExec(action Action) {
+	conn := action.GetActionConnection()
+	response := []byte(UnParseValue("OK", true))
+	_, err := conn.Write(response)
+	if err != nil {
+		fmt.Println("Failed to perform command")
+	}
+}
+
+func pSyncExec(action Action) {
+	conn := action.GetActionConnection()
+	respStr := strings.Join([]string{"FULLRESYNC", CurrInstance.ReplId, strconv.Itoa(CurrInstance.ReplOffset)}, " ")
+	response := []byte(UnParseValue(respStr, true))
 	_, err := conn.Write(response)
 	if err != nil {
 		fmt.Println("Failed to perform command")
@@ -101,12 +117,13 @@ func infoExec(action Action) {
 	conn := action.GetActionConnection()
 	params, nParam := action.GetParams()
 	if nParam == 0 {
-		params = []string{configcore.CURR_INST_INFO}
+		params = make([]interface{}, 1)
+		params[0] = CURR_INST_INFO
 	}
 
-	var infoType string = params[0]
-	var info string = configcore.CurrInstance.GetInfo(infoType)
-	response := []byte(info + "\r\n")
+	var infoType string = params[0].(string)
+	var info string = CurrInstance.GetInfo(infoType)
+	response := []byte(UnParseValue(info, false))
 	_, err := conn.Write(response)
 	if err != nil {
 		fmt.Println("Failed to perform command")

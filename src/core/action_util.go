@@ -1,32 +1,38 @@
 package core
 
-import (
-	"reflect"
-)
+func ParseActions(conn *Connection) error {
+	for {
+		value, parseErr := ParseValue(conn)
 
-func ParseActions(conn Connection) error {
-	// value, valtype := ParseValue()
-	// inval := value.(valtype)
+		if parseErr != nil {
+			return parseErr
+		}
+
+		if value == nil {
+			break
+		}
+
+		action, commandParseErr := ParseCommandFromValue(value, conn)
+		if commandParseErr != nil {
+			return commandParseErr
+		}
+		conn.Actions = append(conn.Actions, action)
+	}
+
 	return nil
 }
 
-func Parse(conn Connection) (interface{}, reflect.Type) {
-	// conn.Read()
-	return string(""), reflect.TypeFor[int]()
-}
+func ParseCommandFromValue(value interface{}, conn *Connection) (Action, error) {
+	action := Action{}
 
-func ParseSimpleString(buffer []byte) (interface{}, reflect.Type) {
-	return string(""), reflect.TypeFor[int]()
-}
+	arrValue, isArr := value.([]interface{})
+	if isArr {
+		actionCmdName := arrValue[0].(string)
+		action.Command = CommandMap[actionCmdName]
+		action.Params = arrValue[1:]
+		action.Connection = conn
+		action.Store = &StoreObj
+	}
 
-func ParseBulkString() (interface{}, reflect.Type) {
-	return string(""), reflect.TypeFor[int]()
-}
-
-func ParseLength() (interface{}, reflect.Type) {
-	return string(""), reflect.TypeFor[int]()
-}
-
-func ParseArray() (interface{}, reflect.Type) {
-	return string(""), reflect.TypeFor[int]()
+	return action, nil
 }

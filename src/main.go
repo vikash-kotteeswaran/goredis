@@ -1,9 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"goredis/src/config"
-	"goredis/src/configcore"
 	"goredis/src/core"
 	"os"
 	"strconv"
@@ -12,7 +12,7 @@ import (
 
 func main() {
 	var connections map[int]core.Connection = map[int]core.Connection{}
-	host, port, instSetupErr := configcore.SetupInstance()
+	host, port, instSetupErr := core.SetupInstance()
 
 	if instSetupErr != nil {
 		fmt.Println("Error: " + instSetupErr.Error())
@@ -68,7 +68,7 @@ func main() {
 				syscall.SetNonblock(connectedFd, true)
 				multiplexer.Subscribe(connectedFd)
 
-				connections[connectedFd] = core.Connection{Fd: connectedFd}
+				connections[connectedFd] = core.Connection{Fd: connectedFd, Buffer: bytes.NewBuffer([]byte{})}
 			} else {
 				connection := connections[availableFd]
 				core.Serve(connection)
@@ -76,15 +76,4 @@ func main() {
 			}
 		}
 	}
-
-	// listener, err = net.Listen("tcp", "0.0.0.0:6379")
-	// if err != nil {
-	// 	fmt.Println("Failed to bind to port 6379")
-	// 	os.Exit(1)
-	// }
-
-	// for {
-	// 	concurrencySema <- 1
-	// 	go core.ListenAndServe(&listener, &concurrencySema)
-	// }
 }

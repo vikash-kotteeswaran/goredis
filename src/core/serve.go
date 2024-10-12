@@ -5,9 +5,9 @@ import (
 )
 
 func Serve(conn Connection) error {
-	err := ParseActions(conn)
+	err := ParseActions(&conn)
 	if err != nil {
-		return err
+		conn.Write([]byte(UnParseString(err.Error(), true)))
 	}
 
 	for _, action := range conn.Actions {
@@ -16,5 +16,6 @@ func Serve(conn Connection) error {
 
 	fmt.Println("Connection :: ", conn.GetConnAddr().String(), " has been served")
 
+	conn.Close()
 	return err
 }

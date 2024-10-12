@@ -1,4 +1,4 @@
-package store
+package core
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 )
 
 // set mutex
-var store Store = Store{entries: map[Key]Value{}}
+var StoreObj Store = Store{entries: map[Key]Value{}}
 
 type Store struct {
 	timer   int64
@@ -24,7 +24,7 @@ type Value struct {
 	expiry  int64
 }
 
-func (this *Store) Set(key interface{}, val string, ttl int64) (bool, error) {
+func (this *Store) Set(key interface{}, val interface{}, ttl int64) (bool, error) {
 	var expiry int64 = -1
 	if ttl != -1 {
 		expiry = time.Now().UnixMilli() + ttl

@@ -2,7 +2,11 @@ package core
 
 import (
 	"errors"
+	"fmt"
+	"goredis/src/config"
+	"io"
 	"net"
+	"os"
 	"syscall"
 )
 
@@ -31,4 +35,32 @@ func SetupServer(host string, port int) (int, error) {
 	}
 
 	return serverFd, nil
+}
+
+func HitFromServer(params []interface{}, toServerAddr *Address) string {
+	unparsed := UnParseValue(params, false)
+
+	conn, connErr := net.Dial("tcp", toServerAddr.AddressStr())
+	if connErr != nil {
+		fmt.Println("Error: ", connErr.Error())
+		os.Exit(1)
+	}
+
+	conn.Write([]byte(unparsed))
+
+	tempBuf := make([]byte, config.CONNECTION_READ_BUF_SIZE)
+	response := ""
+	for {
+		nRead, readErr := conn.Read(tempBuf)
+		if readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+			fmt.Println("Error: ", readErr.Error())
+			os.Exit(1)
+		}
+		response += string(tempBuf[:nRead])
+	}
+
+	return response
 }
