@@ -1,13 +1,14 @@
 package core
 
 import (
+	"encoding/hex"
 	"fmt"
 	"goredis/src/config"
 	"strconv"
 	"strings"
 )
 
-func setKeyExec(action Action) {
+func setKeyExec(action *Action) {
 	conn := action.GetActionConnection()
 	store := action.GetStore()
 	params, nParam := action.GetParams()
@@ -41,11 +42,13 @@ func setKeyExec(action Action) {
 		return
 	}
 
-	response := []byte(UnParseValue("OK", true))
-	conn.Write(response)
+	response := []byte(UnParseValue("OK", true, false))
+	if action.IsReturnable() {
+		WriteResponseToConn(&conn, response)
+	}
 }
 
-func getKeyExec(action Action) {
+func getKeyExec(action *Action) {
 	conn := action.GetActionConnection()
 	store := action.GetStore()
 	params, nParam := action.GetParams()
@@ -62,14 +65,13 @@ func getKeyExec(action Action) {
 		return
 	}
 
-	response := []byte(UnParseValue(value, false))
-	_, writeErr := conn.Write(response)
-	if writeErr != nil {
-		fmt.Println("Failed to perform command")
+	response := []byte(UnParseValue(value, false, false))
+	if action.IsReturnable() {
+		WriteResponseToConn(&conn, response)
 	}
 }
 
-func echoExec(action Action) {
+func echoExec(action *Action) {
 	conn := action.GetActionConnection()
 	params, nParam := action.GetParams()
 	if nParam != 1 {
@@ -78,42 +80,58 @@ func echoExec(action Action) {
 	}
 
 	echoStr := params[0].(string)
-	response := []byte(UnParseValue(echoStr, false))
-	_, err := conn.Write(response)
-	if err != nil {
-		fmt.Println("Failed to perform command")
+	response := []byte(UnParseValue(echoStr, false, false))
+	if action.IsReturnable() {
+		WriteResponseToConn(&conn, response)
 	}
 }
 
-func pingExec(action Action) {
+func pingExec(action *Action) {
 	conn := action.GetActionConnection()
-	response := []byte(UnParseValue("PONG", true))
-	_, err := conn.Write(response)
-	if err != nil {
-		fmt.Println("Failed to perform command")
+	response := []byte(UnParseValue("PONG", true, false))
+	if action.IsReturnable() {
+		WriteResponseToConn(&conn, response)
 	}
 }
 
-func replConfExec(action Action) {
+func replConfExec(action *Action) {
+	var response []byte
 	conn := action.GetActionConnection()
-	response := []byte(UnParseValue("OK", true))
-	_, err := conn.Write(response)
-	if err != nil {
-		fmt.Println("Failed to perform command")
+	params, nParam := action.GetParams()
+
+	for paramIdx, param := range params {
+		if param == "listening-port" && (paramIdx+1) < nParam {
+			replAddr, replPort := Address{}, params[paramIdx+1].(int64)
+			replAddr.Absorb(conn.GetConnAddr().AddressStr())
+			replAddr.Host = "0.0.0.0"
+			CurrInstance.AddReplica(replAddr.Host, int(replPort))
+			fmt.Println("Replica added at :: " + replAddr.Host + ":" + strconv.Itoa(int(replPort)))
+			response = []byte(UnParseValue("OK", true, false))
+		} else if param == "GETACK" {
+			response = []byte(UnParseValue([]interface{}{"REPLCONF", "ACK", CurrInstance.ReplOffset}, false, false))
+		}
+	}
+
+	if action.IsReturnable() {
+		WriteResponseToConn(&conn, response)
 	}
 }
 
-func pSyncExec(action Action) {
+func pSyncExec(action *Action) {
 	conn := action.GetActionConnection()
 	respStr := strings.Join([]string{"FULLRESYNC", CurrInstance.ReplId, strconv.Itoa(CurrInstance.ReplOffset)}, " ")
-	response := []byte(UnParseValue(respStr, true))
-	_, err := conn.Write(response)
-	if err != nil {
-		fmt.Println("Failed to perform command")
+	response := []byte(UnParseValue(respStr, true, false))
+	WriteResponseToConn(&conn, response)
+
+	rdb, rdbDecErr := hex.DecodeString(EMPTY_RDB_HEX)
+	if rdbDecErr != nil {
+		fmt.Println("Failed to decode RDB File :: ", rdbDecErr.Error())
 	}
+	response = []byte(UnParseValue(rdb, false, true))
+	WriteResponseToConn(&conn, response)
 }
 
-func infoExec(action Action) {
+func infoExec(action *Action) {
 	conn := action.GetActionConnection()
 	params, nParam := action.GetParams()
 	if nParam == 0 {
@@ -123,13 +141,12 @@ func infoExec(action Action) {
 
 	var infoType string = params[0].(string)
 	var info string = CurrInstance.GetInfo(infoType)
-	response := []byte(UnParseValue(info, false))
-	_, err := conn.Write(response)
-	if err != nil {
-		fmt.Println("Failed to perform command")
+	response := []byte(UnParseValue(info, false, false))
+	if action.IsReturnable() {
+		WriteResponseToConn(&conn, response)
 	}
 }
 
-func abortExec(action Action) {
+func abortExec(action *Action) {
 	config.DOABORT = true
 }

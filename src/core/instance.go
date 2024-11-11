@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"goredis/src/config"
+	"net"
 	"strconv"
 	"strings"
 )
@@ -20,38 +21,20 @@ const (
 	SLAVE_ROLE  = "slave"
 )
 
-var replica Replica = Replica{Role: MASTER_ROLE}
 var addr Address = Address{Host: config.HOST, Port: config.PORT}
-var CurrInstance Instance = Instance{Name: "default", Addr: addr, Repl: replica}
-
-type Address struct {
-	Host string
-	Port int
-}
+var CurrInstance Instance = Instance{Name: "default", Role: MASTER_ROLE, Addr: addr}
 
 type Instance struct {
 	Name       string
+	Role       string
 	Addr       Address
 	ReplId     string
 	ReplOffset int
-	Repl       Replica
+	Replicas   Instances
+	MasterAddr Address
 }
 
-type Replica struct {
-	Role          string
-	ReplicaOfAddr Address
-}
-
-func (addr *Address) String() string {
-	var addrInfo string
-	addrInfo = ("host:" + addr.Host + "\n" +
-		"port:" + strconv.Itoa(addr.Port))
-	return addrInfo
-}
-
-func (addr *Address) AddressStr() string {
-	return addr.Host + ":" + strconv.Itoa(addr.Port)
-}
+type Instances []Instance
 
 func (instance *Instance) String() string {
 	var instanceInfo string
@@ -59,7 +42,7 @@ func (instance *Instance) String() string {
 		instance.Addr.String() + "\n" +
 		"master_repl_id:" + instance.ReplId + "\n" +
 		"master_repl_offset:" + strconv.Itoa(instance.ReplOffset) + "\n" +
-		instance.Repl.String())
+		instance.Replicas.String())
 	return instanceInfo
 }
 
@@ -67,7 +50,7 @@ func (instance *Instance) GetInfo(infoType string) string {
 	var instanceInfo string
 	switch infoType {
 	case REPL_INFO:
-		instanceInfo = instance.Repl.String()
+		instanceInfo = instance.Replicas.String()
 	case CURR_INST_INFO:
 		instanceInfo = instance.String()
 	default:
@@ -76,11 +59,78 @@ func (instance *Instance) GetInfo(infoType string) string {
 	return instanceInfo
 }
 
-func (repl *Replica) String() string {
-	var replInfo string
-	replInfo = ("role:" + repl.Role + "\n" +
-		"<replicaof>\n" + repl.ReplicaOfAddr.String() + "\n<\\replicaof>\n")
-	return replInfo
+func (ins *Instance) HasReplicas() bool {
+	return len(ins.Replicas) > 0
+}
+
+func (ins *Instance) AddReplica(newReplHost string, newReplPort int) bool {
+	var repl Instance
+
+	repl.Name = "replica" + strconv.Itoa(CurrInstance.ReplOffset)
+	repl.Addr.Host = newReplHost
+	repl.Addr.Port = newReplPort
+	repl.Role = SLAVE_ROLE
+	repl.ReplId = "23jk4b4k36bk45jb6k3b4ib123k5bjk23btibd"
+	repl.ReplOffset = 0
+	repl.MasterAddr = CurrInstance.Addr
+
+	ins.Replicas = append(ins.Replicas, repl)
+
+	return true
+}
+
+func (repls *Instances) String() string {
+	var replsInfo string
+
+	for _, repl := range *repls {
+		replsInfo = repl.String()
+	}
+	return replsInfo
+}
+
+func (repls *Instances) Contains(insAddr string) bool {
+	isContained := false
+	for _, repl := range *repls {
+		if repl.Addr.AddressStr() == insAddr {
+			isContained = true
+			break
+		}
+	}
+
+	return isContained
+}
+
+func (repls *Instances) ContainsHost(insAddrHost string) bool {
+	isContained := false
+	for _, repl := range *repls {
+		if repl.Addr.Host == insAddrHost {
+			isContained = true
+			break
+		}
+	}
+
+	return isContained
+}
+
+func (repls *Instances) ContainsNetAddr(insAddr net.Addr) bool {
+	if insAddr == nil {
+		return false
+	}
+	return repls.Contains(insAddr.String())
+}
+
+func (repls *Instances) ContainsAddress(insAddr *Address) bool {
+	if insAddr == nil {
+		return false
+	}
+	return repls.Contains(insAddr.String())
+}
+
+func (repls *Instances) ContainsAddressHost(insAddr *Address) bool {
+	if insAddr == nil {
+		return false
+	}
+	return repls.ContainsHost(insAddr.Host)
 }
 
 func SetupInstance() (string, int, error) {
@@ -99,16 +149,17 @@ func SetupInstance() (string, int, error) {
 	CurrInstance.Addr.Host = host
 	CurrInstance.Addr.Port = port
 	if replicaofAddr != "" {
-		CurrInstance.Repl.Role = SLAVE_ROLE
-		replicaofAddrSplit := strings.Split(replicaofAddr, ":")
-		if len(replicaofAddrSplit) != 2 {
-			fmt.Println("Invalid replicaof address")
-			return "", -1, fmt.Errorf("Invalid replicaof address")
-		}
-		CurrInstance.Repl.ReplicaOfAddr.Host = replicaofAddrSplit[0]
-		CurrInstance.Repl.ReplicaOfAddr.Port, _ = strconv.Atoi(replicaofAddrSplit[1])
+		CurrInstance.Role = SLAVE_ROLE
+		CurrInstance.ReplId = "23jk4b4k36bk45jb6k3b4ib123k5bjk23btibd"
+		CurrInstance.ReplOffset = 0
+		absorbed, absorbErr := CurrInstance.MasterAddr.Absorb(replicaofAddr)
 
-		err := setupReplica(&CurrInstance.Addr, &CurrInstance.Repl.ReplicaOfAddr)
+		if !absorbed && absorbErr != nil {
+			fmt.Println("Invalid replicaof address")
+			return "", -1, absorbErr
+		}
+
+		err := setupReplica(&CurrInstance.Addr, &CurrInstance.MasterAddr)
 
 		if err != nil {
 			return "", -1, err
@@ -116,7 +167,7 @@ func SetupInstance() (string, int, error) {
 	} else {
 		CurrInstance.ReplId = "23jk4b4k36bk45jb6k3b4ib123k5bjk23btibd"
 		CurrInstance.ReplOffset = 0
-		CurrInstance.Repl.Role = MASTER_ROLE
+		CurrInstance.Role = MASTER_ROLE
 	}
 
 	return host, port, nil

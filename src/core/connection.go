@@ -2,8 +2,8 @@ package core
 
 import (
 	"bytes"
+	"fmt"
 	"io"
-	"net"
 	"syscall"
 )
 
@@ -12,10 +12,21 @@ type Connection struct {
 	Fd      int
 	Buffer  *bytes.Buffer
 	Actions Actions
+	Meta    ConnMeta
+
+	addr *Address
+}
+
+type ConnMeta struct {
+	BytesRead   int
+	FromReplica bool
+	FromMaster  bool
 }
 
 func (conn *Connection) Read(readBytes []byte) (int, error) {
-	return syscall.Read(conn.Fd, readBytes)
+	nRead, readErr := syscall.Read(conn.Fd, readBytes)
+	conn.Meta.BytesRead += nRead
+	return nRead, readErr
 }
 
 func (conn *Connection) Write(writeBytes []byte) (int, error) {
@@ -38,10 +49,28 @@ func (conn *Connection) ReadStringUntilFromBuffer(byte byte) (string, error) {
 	return conn.Buffer.ReadString(byte)
 }
 
-func (conn *Connection) GetConnAddr() net.IP {
-	addr, _ := syscall.GetsockoptInet4Addr(conn.Fd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR)
-	ip := net.IPv4(addr[0], addr[1], addr[2], addr[3])
-	return ip
+func (conn *Connection) SetConnAddr() error {
+	socketAddr, err := syscall.Getpeername(conn.Fd)
+	if err != nil {
+		err := fmt.Errorf("Encountered error while getting connection address :: ", err.Error())
+		return err
+	}
+	conn.addr = &Address{}
+	conn.addr.AbsorbSockAddr(&socketAddr)
+
+	return nil
+}
+
+func (conn *Connection) GetConnAddr() *Address {
+	if conn.addr == nil || (conn.addr == nil && conn.addr.Host == "" && conn.addr.Port < 0) {
+		conn.SetConnAddr()
+	}
+	return conn.addr
+}
+
+func (conn *Connection) SetConnectionFrom() {
+	conn.Meta.FromMaster = CurrInstance.MasterAddr.EqualsAddressHost(conn.addr)
+	conn.Meta.FromReplica = CurrInstance.Replicas.ContainsAddressHost(conn.addr)
 }
 
 func (conn *Connection) Close() {

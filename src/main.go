@@ -25,7 +25,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("Server File Descriptor :: " + strconv.Itoa(serverFd) + ":: Created and Binded to Host and Port :: " + host + ":" + strconv.Itoa(port))
+	fmt.Println("Server File Descriptor :: " + strconv.Itoa(serverFd) + " :: Created and Binded to Host and Port :: " + host + ":" + strconv.Itoa(port))
 
 	listenErr := syscall.Listen(serverFd, config.CONCURRENCY_LIMIT)
 	if listenErr != nil {

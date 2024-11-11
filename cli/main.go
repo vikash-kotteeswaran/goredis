@@ -42,7 +42,7 @@ func main() {
 		}
 	}
 
-	response := core.HitFromServer(goredisParams, core.Address{Host: host, Port: port})
+	response := core.HitFromServer(goredisParams, &core.Address{Host: host, Port: port})
 
 	fmt.Println(response)
 }

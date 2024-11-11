@@ -10,3 +10,5 @@
 //
 // 4) Simultaneously connections are accepted from subscribed server fd and already suscribed connection fds are used
 // to serve the respective connection requests
+//
+// 5) Seperate Replica Requests from Client Request in a new Thread

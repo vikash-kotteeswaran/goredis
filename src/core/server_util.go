@@ -38,12 +38,12 @@ func SetupServer(host string, port int) (int, error) {
 }
 
 func HitFromServer(params []interface{}, toServerAddr *Address) string {
-	unparsed := UnParseValue(params, false)
+	unparsed := UnParseValue(params, false, false)
 
 	conn, connErr := net.Dial("tcp", toServerAddr.AddressStr())
 	if connErr != nil {
 		fmt.Println("Error: ", connErr.Error())
-		os.Exit(1)
+		return ""
 	}
 
 	conn.Write([]byte(unparsed))
@@ -61,6 +61,8 @@ func HitFromServer(params []interface{}, toServerAddr *Address) string {
 		}
 		response += string(tempBuf[:nRead])
 	}
+
+	// conn.Close()
 
 	return response
 }

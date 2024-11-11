@@ -1,7 +1,7 @@
 package core
 
 import (
-	"fmt"
+	"sync"
 	"time"
 )
 
@@ -20,6 +20,7 @@ type Key struct {
 
 type Value struct {
 	value   interface{}
+	lock    *sync.Mutex
 	valType string
 	expiry  int64
 }
@@ -30,7 +31,16 @@ func (this *Store) Set(key interface{}, val interface{}, ttl int64) (bool, error
 		expiry = time.Now().UnixMilli() + ttl
 	}
 	keyWr := Key{key: key}
-	valWr := Value{value: val, expiry: expiry}
+	valWr, isKeyPresent := this.entries[keyWr]
+	if isKeyPresent {
+		valWr.lock.Lock()
+		valWr.value = val
+		valWr.expiry = expiry
+		valWr.lock.Unlock()
+	} else {
+		valWr = Value{value: val, expiry: expiry, lock: &sync.Mutex{}}
+	}
+
 	this.entries[keyWr] = valWr
 	return true, nil
 }
@@ -43,7 +53,6 @@ func (this *Store) Get(key interface{}) (interface{}, error) {
 	}
 
 	valExpiry, timeNow := valWr.expiry, time.Now().UnixMilli()
-	fmt.Println("Value :: ", valExpiry, timeNow)
 	if valExpiry != -1 && valExpiry < timeNow {
 		delete(this.entries, keyWr)
 		return "-1", nil

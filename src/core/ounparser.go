@@ -5,9 +5,7 @@ import (
 	"strconv"
 )
 
-const CLRF = "\r\n"
-
-func UnParseValue(value interface{}, isSimpleStr bool) string {
+func UnParseValue(value interface{}, isSimpleStr bool, isRDB bool) string {
 	var unparsed string
 
 	switch value.(type) {
@@ -19,6 +17,13 @@ func UnParseValue(value interface{}, isSimpleStr bool) string {
 		break
 	case int64:
 		unparsed = UnParseInt(value.(int64))
+		break
+	case []byte:
+		if isRDB {
+			unparsed = UnParseRDB(value.([]byte))
+		} else {
+			fmt.Println("Unknown Value")
+		}
 		break
 	case []interface{}:
 		unparsed = UnParseArray(value.([]interface{}))
@@ -50,8 +55,12 @@ func UnParseArray(value []interface{}) string {
 	unparsed := "*" + strconv.Itoa(len(value)) + CLRF
 
 	for _, element := range value {
-		unparsed += UnParseValue(element, false)
+		unparsed += UnParseValue(element, false, false)
 	}
 
 	return unparsed
+}
+
+func UnParseRDB(rdb []byte) string {
+	return "$" + strconv.Itoa(len(rdb)) + CLRF + string(rdb)
 }
